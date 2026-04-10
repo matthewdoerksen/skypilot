@@ -261,6 +261,8 @@ auth:
     cookie-refresh: null  # refresh tokens after this duration (Access token lifespan minus 1 min)
     # @schema type: [string, number, null]
     cookie-expire: null  # cookie expiration time (should match refresh token lifespan)
+    # Use HTTPS in nginx auth-signin redirects (Grafana ingress). Default auth_request URL
+    # follows the same use-https flag unless ingress.oauth2-internal-auth-url is set.
     use-https: false
 
   # Service account token based authentication for the API server
@@ -366,6 +368,13 @@ ingress:
   # @schema type: [object, null]
   annotations: null
 
+  # Optional full URL for nginx auth_request to oauth2-proxy. If unset, defaults to
+  # http(s)://$host/oauth2/auth from the relevant use-https setting (backward compatible).
+  # Set explicitly when that default is wrong (e.g. TLS terminates at a gateway and auth_request
+  # must target an in-cluster URL). Umbrella charts can set any scheme/host/path.
+  # @schema type: [string, null]
+  oauth2-internal-auth-url: null
+
   # TODO(aylei): deprecate skypilot managed proxy auth to reduce our maintenance burden, replace with examples instead.
   # OAuth2 Proxy configuration for authentication
   oauth2-proxy:
@@ -388,7 +397,8 @@ ingress:
     # If empty/null, the above client-id and client-secret values are used instead
     # See https://docs.skypilot.co/en/latest/reference/auth.html#oauth-client-secret
     client-details-from-secret: ""
-    # Use HTTPS (set to true for production environments)
+    # Use HTTPS in nginx auth-signin redirects only (browser-facing). Default auth_request URL
+    # follows the same use-https flag unless ingress.oauth2-internal-auth-url is set.
     use-https: false
     # Email domains to allow (use "*" for all domains)
     email-domain: "*"

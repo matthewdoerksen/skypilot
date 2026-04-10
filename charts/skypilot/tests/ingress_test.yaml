@@ -55,6 +55,17 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
           value: "https://$host/oauth2/auth"
 
+  - it: should honor ingress.oauth2-internal-auth-url for auth-url
+    set:
+      ingress.enabled: true
+      ingress.oauth2-proxy.enabled: true
+      ingress.oauth2-proxy.use-https: true
+      ingress.oauth2-internal-auth-url: "https://oauth2.example.internal:8443/oauth2/auth"
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "https://oauth2.example.internal:8443/oauth2/auth"
+
   # Test OAuth2 proxy integration with API server authentication
   - it: should disable ingress OAuth2 proxy when API server OAuth2 auth is enabled
     set:

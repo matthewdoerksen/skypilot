@@ -429,6 +429,12 @@
                 "ingressClassName": {
                     "type": "string"
                 },
+                "oauth2-internal-auth-url": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
                 "oauth2-proxy": {
                     "type": "object",
                     "properties": {

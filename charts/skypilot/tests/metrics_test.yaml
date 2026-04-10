@@ -58,3 +58,58 @@ tests:
       - equal:
           path: metadata.annotations["example.com/baz"]
           value: "qux"
+
+  - it: should use default auth-url and route oauth2 on Grafana ingress when ingress oauth2-proxy is enabled
+    set:
+      ingress:
+        unified: false
+        enabled: true
+        oauth2-proxy:
+          enabled: true
+          use-https: true
+          oidc-issuer-url: "https://example.okta.com/oauth2/default"
+          client-id: "test-client-id"
+          client-secret: "test-client-secret"
+      grafana:
+        enabled: true
+        ingress:
+          enableAuthedIngress: true
+          ingressClassName: nginx
+          path: "/grafana"
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "https://$host/oauth2/auth"
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-signin"]
+          value: "https://$host/oauth2/start?rd=$escaped_request_uri"
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/oauth2"
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: "/grafana"
+
+  - it: should route oauth2 on Grafana ingress when auth.oauth is enabled
+    set:
+      ingress:
+        unified: false
+      auth:
+        oauth:
+          enabled: true
+          use-https: true
+          oidc-issuer-url: "https://example.okta.com/oauth2/default"
+          client-id: "test-client-id"
+          client-secret: "test-client-secret"
+      grafana:
+        enabled: true
+        ingress:
+          enableAuthedIngress: true
+          ingressClassName: nginx
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "https://$host/oauth2/auth"
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/oauth2"

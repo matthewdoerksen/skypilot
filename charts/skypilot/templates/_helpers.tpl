@@ -155,6 +155,32 @@ false
 http://{{ include "skypilot.fullname" . }}-oauth2-proxy:4180
 {{- end -}}
 
+{{/*
+Full URL for nginx ingress auth_request to oauth2-proxy (/oauth2/auth).
+
+Call with (dict "root" .) for the main API ingress, or
+(dict "root" . "oauth2" <auth.oauth or ingress.oauth2-proxy map>) for Grafana.
+
+If ingress.oauth2-internal-auth-url is set, it is used as-is. Otherwise the
+legacy default is http(s)://$host/oauth2/auth from the relevant use-https flag
+(ingress.oauth2-proxy or auth.oauth). Override when TLS terminates in front of
+the cluster so auth_request must not use https://$host.
+*/}}
+{{- define "skypilot.nginxOauth2ProxyAuthURL" -}}
+{{- $ctx := . -}}
+{{- $root := index $ctx "root" | default $ctx -}}
+{{- $oauth2 := index $root.Values.ingress "oauth2-proxy" -}}
+{{- if hasKey $ctx "oauth2" -}}
+{{- $oauth2 = index $ctx "oauth2" -}}
+{{- end -}}
+{{- $override := index $root.Values.ingress "oauth2-internal-auth-url" | default "" | trim -}}
+{{- if $override -}}
+{{- $override -}}
+{{- else -}}
+{{- if index $oauth2 "use-https" | default false }}https{{ else }}http{{ end }}://$host/oauth2/auth
+{{- end -}}
+{{- end -}}
+
 {{- define "skypilot.ingressBasicAuthEnabled" -}}
 {{- if and .Values.ingress.enabled (or .Values.ingress.authSecret .Values.ingress.authCredentials) -}}
 true

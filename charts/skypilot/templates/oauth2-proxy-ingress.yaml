@@ -14,11 +14,11 @@ metadata:
     skypilot.co/component: oauth2-proxy
   annotations:
     {{- if not $useNewIngressClass }}
-    kubernetes.io/ingress.class: nginx
+    kubernetes.io/ingress.class: {{ .Values.ingress.ingressClassName }}
     {{- end }}
 spec:
   {{- if $useNewIngressClass }}
-  ingressClassName: nginx
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
   {{- end }}
   rules:
   - host: {{ .Values.ingress.host }}

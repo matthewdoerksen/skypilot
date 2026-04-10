@@ -1,5 +1,6 @@
 {{- if and (not .Values.ingress.unified) .Values.grafana.enabled .Values.grafana.ingress.enableAuthedIngress }}
 {{- $fullName := include "skypilot.fullname" . -}}
+{{- $oauth2IngressAuth := or .Values.auth.oauth.enabled (and .Values.ingress.enabled (index .Values.ingress "oauth2-proxy" "enabled")) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,7 +14,7 @@ metadata:
     {{- $oauth2 = index .Values.ingress "oauth2-proxy" -}}
     {{- end }}
     nginx.ingress.kubernetes.io/auth-signin: {{ if index $oauth2 "use-https" | default false }}https{{ else }}http{{ end }}://$host/oauth2/start?rd=$escaped_request_uri
-    nginx.ingress.kubernetes.io/auth-url: {{ if index $oauth2 "use-https" | default false }}https{{ else }}http{{ end }}://$host/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-url: {{ include "skypilot.nginxOauth2ProxyAuthURL" (dict "root" . "oauth2" $oauth2) }}
     nginx.ingress.kubernetes.io/auth-response-headers: {{ index .Values.grafana "grafana.ini" "auth.proxy" "header_name" }}
     {{- else }}
     # Basic authentication
@@ -34,6 +35,15 @@ spec:
     {{- end }}
     http:
       paths:
+      {{- if $oauth2IngressAuth }}
+      - path: /oauth2
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ $fullName }}-oauth2-proxy
+            port:
+              number: 4180
+      {{- end }}
       - backend:
           service:
             name: {{ $fullName }}-grafana

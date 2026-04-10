@@ -121,6 +121,7 @@ Below is the available helm value keys and the default value of each key:
     :ref:`path <helm-values-ingress-path>`: '/'
     :ref:`ingressClassName <helm-values-ingress-ingressClassName>`: nginx
     :ref:`annotations <helm-values-ingress-annotations>`: null
+    :ref:`oauth2-internal-auth-url <helm-values-ingress-oauth2-internal-auth-url>`: null
     # Deprecated: use auth.oauth instead.
     :ref:`oauth2-proxy <helm-values-ingress-oauth2-proxy>`:
       :ref:`enabled <helm-values-ingress-oauth2-proxy-enabled>`: false
@@ -1504,6 +1505,20 @@ Default: ``null``
     annotations:
       my-annotation: "my-value"
 
+.. _helm-values-ingress-oauth2-internal-auth-url:
+
+``ingress.oauth2-internal-auth-url``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Optional full URL for nginx ``auth_request`` to oauth2-proxy. If unset, the chart keeps the legacy default ``http(s)://$host/oauth2/auth`` from the relevant ``use-https`` flag (same behavior as before this value existed). Set this when that default is wrong—for example TLS terminates in front of the cluster and ``auth_request`` must use a different endpoint. Umbrella charts may set any scheme, host, port, and path.
+
+Default: ``null``
+
+.. code-block:: yaml
+
+  ingress:
+    oauth2-internal-auth-url: "http://my-oauth2-internal.example/oauth2/auth"
+
 .. _helm-values-ingress-oauth2-proxy:
 
 ``ingress.oauth2-proxy``
@@ -1518,6 +1533,7 @@ Default: see the yaml below.
 .. code-block:: yaml
 
   ingress:
+    oauth2-internal-auth-url: null
     oauth2-proxy:
       enabled: false
       # Required when enabled:
