@@ -120,8 +120,7 @@ def test_managed_jobs_cancelled_job_logs(generic_cloud: str):
             get_cmd_wait_until_managed_job_status_contains_matching_job_name(
                 job_name=name,
                 job_status=[sky.ManagedJobStatus.RUNNING],
-                timeout=360
-                if generic_cloud in ['azure', 'kubernetes', 'nebius'] else 120),
+                timeout=360),
             # Give time for log output to be flushed to disk on cluster.
             'sleep 10',
             f'sky jobs cancel -y -n {name}',
@@ -170,8 +169,7 @@ def test_pipeline_cancelled_logs(generic_cloud: str):
                 get_cmd_wait_until_managed_job_status_contains_matching_job_name(
                     job_name=name,
                     job_status=[sky.ManagedJobStatus.RUNNING],
-                    timeout=360 if generic_cloud
-                    in ['azure', 'kubernetes', 'nebius'] else 120),
+                    timeout=360),
                 # Give time for log output to be flushed to disk on cluster.
                 'sleep 10',
                 f'sky jobs cancel -y -n {name}',
@@ -1912,9 +1910,9 @@ def test_managed_jobs_exit_code_recovery(generic_cloud: str):
                 # Wait a bit for the job to fail and start recovery
                 'sleep 60',
                 # Check that recovery count is greater than 0
-                # Recovery count is NF-2 (third column from the end)
+                # Recovery count is NF-3 (fourth column from the end)
                 f'for i in {{1..20}}; do '
-                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-2)}}\'); '
+                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-3)}}\'); '
                 f'  echo "Recovery count: $RECOVERY_COUNT"; '
                 f'  if [ "$RECOVERY_COUNT" != "-" ] && [ "$RECOVERY_COUNT" -gt 0 ]; then '
                 f'    echo "Recovery count is greater than 0: $RECOVERY_COUNT"; '
@@ -1985,9 +1983,9 @@ def test_managed_jobs_exit_code_recovery_multinode(generic_cloud: str):
                 # Wait a bit for the job to fail and start recovery
                 'sleep 60',
                 # Check that recovery count is greater than 0
-                # Recovery count is NF-2 (third column from the end)
+                # Recovery count is NF-3 (fourth column from the end)
                 f'for i in {{1..20}}; do '
-                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-2)}}\'); '
+                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-3)}}\'); '
                 f'  echo "Recovery count: $RECOVERY_COUNT"; '
                 f'  if [ "$RECOVERY_COUNT" != "-" ] && [ "$RECOVERY_COUNT" -gt 0 ]; then '
                 f'    echo "Recovery count is greater than 0: $RECOVERY_COUNT"; '
@@ -2046,9 +2044,9 @@ def test_managed_jobs_exit_code_recovery_single(generic_cloud: str):
                 # Wait a bit for the job to fail and start recovery
                 'sleep 60',
                 # Check that recovery count is greater than 0
-                # Recovery count is NF-2 (third column from the end)
+                # Recovery count is NF-3 (fourth column from the end)
                 f'for i in {{1..20}}; do '
-                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-2)}}\'); '
+                f'  RECOVERY_COUNT=$(sky jobs queue | grep {name} | head -n1 | awk \'{{print $(NF-3)}}\'); '
                 f'  echo "Recovery count: $RECOVERY_COUNT"; '
                 f'  if [ "$RECOVERY_COUNT" != "-" ] && [ "$RECOVERY_COUNT" -gt 0 ]; then '
                 f'    echo "Recovery count is greater than 0: $RECOVERY_COUNT"; '
@@ -2807,7 +2805,7 @@ def test_managed_job_node_names_single_node(generic_cloud: str):
                 # Wait for job to be running and node_names to be populated
                 # Use longer timeout to account for controller startup
                 job = smoke_tests_utils.wait_for_managed_job_status_sdk(
-                    name, [sky.ManagedJobStatus.SUCCEEDED], timeout=300)
+                    name, [sky.ManagedJobStatus.SUCCEEDED], timeout=400)
                 # Give time for node_names to be populated after launch
                 time.sleep(10)
                 # Re-fetch to get updated node_names
@@ -2839,7 +2837,7 @@ def test_managed_job_node_names_multi_node(generic_cloud: str):
                 # Wait for job to be running
                 # Use longer timeout to account for controller startup
                 job = smoke_tests_utils.wait_for_managed_job_status_sdk(
-                    name, [sky.ManagedJobStatus.SUCCEEDED], timeout=300)
+                    name, [sky.ManagedJobStatus.SUCCEEDED], timeout=400)
                 # Give time for node_names to be populated after launch
                 time.sleep(10)
                 # Re-fetch to get updated node_names

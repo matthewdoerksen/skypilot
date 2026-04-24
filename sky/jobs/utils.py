@@ -198,41 +198,6 @@ def terminate_cluster(
             time.sleep(backoff.current_backoff())
 
 
-def _validate_consolidation_mode_config(
-        current_is_consolidation_mode: bool) -> None:
-    """Validate the consolidation mode config."""
-    # Check whether the consolidation mode config is changed.
-    if current_is_consolidation_mode:
-        controller_cn = (
-            controller_utils.Controllers.JOBS_CONTROLLER.value.cluster_name)
-        if global_user_state.cluster_with_name_exists(controller_cn):
-            logger.warning(
-                f'{colorama.Fore.RED}Consolidation mode for jobs is enabled, '
-                f'but the controller cluster {controller_cn} is still running. '
-                'Please terminate the controller cluster first.'
-                f'{colorama.Style.RESET_ALL}')
-    else:
-        total_jobs = managed_job_state.get_managed_jobs_total()
-        if total_jobs > 0:
-            nonterminal_jobs = (
-                managed_job_state.get_nonterminal_job_ids_by_name(
-                    None, None, all_users=True))
-            if nonterminal_jobs:
-                logger.warning(
-                    f'{colorama.Fore.YELLOW}Consolidation mode is disabled, '
-                    f'but there are still {len(nonterminal_jobs)} managed jobs '
-                    'running. Please terminate those jobs first.'
-                    f'{colorama.Style.RESET_ALL}')
-            else:
-                logger.warning(
-                    f'{colorama.Fore.YELLOW}Consolidation mode is disabled, '
-                    f'but there are {total_jobs} jobs from previous '
-                    'consolidation mode. Reset the `jobs.controller.'
-                    'consolidation_mode` to `true` and run `sky jobs queue` '
-                    'to see those jobs. Switching to normal mode will '
-                    f'lose the job history.{colorama.Style.RESET_ALL}')
-
-
 def setup_consolidation_mode_on_startup(deploy: bool) -> None:
     """Set up consolidation mode signal file on API server startup.
 
@@ -274,7 +239,7 @@ def setup_consolidation_mode_on_startup(deploy: bool) -> None:
             # Local API server: don't auto-enable
             enabled = False
 
-    _validate_consolidation_mode_config(enabled)
+    controller_utils.warn_jobs_consolidation_mode_intent(enabled)
 
     if enabled:
         signal_file.touch()
@@ -286,42 +251,14 @@ def setup_consolidation_mode_on_startup(deploy: bool) -> None:
 # jobs controller will not be running on a separate cluster, but locally on the
 # API Server. Under the hood, we submit the job monitoring logic as processes
 # directly in the API Server.
-# The signal file is the source of truth, managed by
-# setup_consolidation_mode_on_startup() at server start. Config changes
-# (enabling or disabling) require a server restart to take effect.
+# Thin wrapper around controller_utils.is_jobs_consolidation_mode — the helper
+# owns the signal-file read, the config-vs-signal restart warning, and the
+# jobs validator call. See controller_utils for the full contract.
+# INVARIANT: serve_utils.is_consolidation_mode(pool=True) routes through the
+# same helper, so pool and managed-jobs readers cannot diverge.
 @annotations.lru_cache(scope='request', maxsize=1)
 def is_consolidation_mode() -> bool:
-    if os.environ.get(constants.OVERRIDE_CONSOLIDATION_MODE) is not None:
-        return True
-
-    signal_file = pathlib.Path(
-        managed_job_constants.JOBS_CONSOLIDATION_RELOADED_SIGNAL_FILE
-    ).expanduser()
-    effective = signal_file.exists()
-
-    # We should only do this check on API server, as the controller will not
-    # have related config and will always seemingly disabled for consolidation
-    # mode. Check #6611 for more details.
-    if os.environ.get(constants.ENV_VAR_IS_SKYPILOT_SERVER) is not None:
-        # Warn if explicit config disagrees with actual state — the admin
-        # needs to restart the server for the config change to take effect.
-        config_value = skypilot_config.get_nested(
-            ('jobs', 'controller', 'consolidation_mode'), default_value=None)
-        if config_value is not None and config_value != effective:
-            expected = 'enabled' if config_value else 'disabled'
-            logger.warning(
-                f'{colorama.Fore.YELLOW}Consolidation mode for managed jobs '
-                f'is {expected} in the server config, but the API server has '
-                'not been restarted yet. Please restart the API server to '
-                f'apply the change.{colorama.Style.RESET_ALL}')
-        # Validation may print a warning. Run validation against the intended
-        # (config) value to print warnings that should be addressed before the
-        # server is restarted.
-        if config_value is not None:
-            assert isinstance(config_value, bool), config_value
-            _validate_consolidation_mode_config(config_value)
-
-    return effective
+    return controller_utils.is_jobs_consolidation_mode()
 
 
 def ha_recovery_for_consolidation_mode() -> None:
@@ -1442,6 +1379,16 @@ def stream_logs_by_id(
                     f'{job_msg}',
                     exceptions.JobExitCode.from_managed_job_status(
                         managed_job_status))
+        # Batch coordinator jobs run inline on the controller — no
+        # separate cluster is provisioned. Stream controller logs instead
+        # of trying to find a worker cluster handle.
+        if managed_job_state.is_batch_job(job_id):
+            return stream_logs(job_id,
+                               job_name=None,
+                               controller=True,
+                               follow=follow,
+                               tail=tail)
+
         backend = backends.CloudVmRayBackend()
         latest_task_id, managed_job_status = (
             managed_job_state.get_latest_task_id_status(job_id))
@@ -2347,6 +2294,10 @@ def format_job_table(
             pool_status: Optional[List[Dict[str, Any]]]) -> Dict[int, int]:
         """Create a mapping from job_id to worker replica_id.
 
+        Jobs that appear on multiple workers (e.g. batch coordinators
+        that orchestrate across the whole pool) are excluded — they
+        should not display a single ``(worker=N)`` annotation.
+
         Args:
             pool_status: List of pool status dictionaries with replica_info.
 
@@ -2354,6 +2305,7 @@ def format_job_table(
             Dictionary mapping job_id to replica_id (worker ID).
         """
         job_to_worker: Dict[int, int] = {}
+        multi_worker_jobs: Set[int] = set()
         if pool_status is None:
             return job_to_worker
         for pool in pool_status:
@@ -2362,7 +2314,11 @@ def format_job_table(
                 used_by = replica.get('used_by')
                 if used_by is not None:
                     for job_id in used_by:
+                        if job_id in job_to_worker:
+                            multi_worker_jobs.add(job_id)
                         job_to_worker[job_id] = replica.get('replica_id')
+        for job_id in multi_worker_jobs:
+            del job_to_worker[job_id]
         return job_to_worker
 
     # Create mapping from job_id to worker replica_id
@@ -2386,6 +2342,23 @@ def format_job_table(
         if show_all:
             user_cols.append('USER_ID')
 
+    def _fmt_batch_progress(task_or_tasks) -> str:
+        """Format batch progress as 'completed/total' or '-' if not a batch."""
+        if isinstance(task_or_tasks, list):
+            t = task_or_tasks[0]
+        else:
+            t = task_or_tasks
+        total = t.get('batch_total_batches')
+        if not total:
+            return '-'
+        status = t.get('status')
+        if (isinstance(status, managed_job_state.ManagedJobStatus) and
+                status == managed_job_state.ManagedJobStatus.WINDING_DOWN):
+            return 'Winding down'
+        completed = t.get('batch_completed_batches') or 0
+        pct = int(completed * 100 / total)
+        return f'{pct}% {completed}/{total}'
+
     columns = [
         'ID',
         'TASK',
@@ -2398,6 +2371,7 @@ def format_job_table(
         'JOB DURATION',
         '#RECOVERIES',
         'STATUS',
+        'PROGRESS',
         'POOL',
     ]
     if show_all:
@@ -2529,6 +2503,7 @@ def format_job_table(
                 job_duration,
                 recovery_cnt,
                 status_str,
+                _fmt_batch_progress(job_tasks),
                 pool,
             ]
             if show_all:
@@ -2592,6 +2567,7 @@ def format_job_table(
                 job_duration,
                 task['recovery_count'],
                 task['status'].colored_str(),
+                _fmt_batch_progress(task),
                 pool,
             ]
             if show_all:
@@ -2766,8 +2742,12 @@ class ManagedJobCodeGen:
 
         # Plugins are only loaded for managed jobs version 13 and above.
         if managed_job_version >= 13:
+            from sky import sky_logging as _sky_logging
             from sky.server import plugins
-            plugins.load_plugins(plugins.ExtensionContext())
+            # Suppress logging during plugin loading to prevent installation
+            # logs from leaking into codegen output.
+            with _sky_logging.silent():
+                plugins.load_plugins(plugins.ExtensionContext())
         """)
 
     @classmethod
@@ -2792,6 +2772,10 @@ class ManagedJobCodeGen:
         _fields = {fields!r}
         if managed_job_version < 15 and _fields is not None:
             _fields = [f for f in _fields if f != 'is_primary_in_job_group']
+        # Filter out batch fields for older controllers (< 18)
+        _BATCH_FIELDS = {{'is_batch', 'batch_total_batches', 'batch_completed_batches'}}
+        if managed_job_version < 18 and _fields is not None:
+            _fields = [f for f in _fields if f not in _BATCH_FIELDS]
         if managed_job_version < 9:
             # For backward compatibility, since filtering is not supported
             # before #6652.
