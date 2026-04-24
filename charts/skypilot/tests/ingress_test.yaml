@@ -327,3 +327,26 @@ tests:
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-next-upstream-tries"]
           value: "3"
+
+  - it: should add oauth2 path on unified ingress when auth.oauth is enabled
+    set:
+      ingress.enabled: true
+      ingress.unified: true
+      auth.oauth.enabled: true
+      auth.oauth.oidc-issuer-url: "https://example.okta.com/oauth2/default"
+      auth.oauth.client-id: "test-client-id"
+      auth.oauth.client-secret: "test-client-secret"
+    capabilities:
+      majorVersion: 1
+      minorVersion: 19
+    asserts:
+      - contains:
+          path: spec.rules[0].http.paths
+          content:
+            path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: RELEASE-NAME-oauth2-proxy
+                port:
+                  number: 4180

@@ -12,8 +12,17 @@ metadata:
     {{- if not .Values.auth.oauth.enabled -}}
     {{- $oauth2 = index .Values.ingress "oauth2-proxy" -}}
     {{- end }}
-    nginx.ingress.kubernetes.io/auth-signin: {{ if index $oauth2 "use-https" | default false }}https{{ else }}http{{ end }}://$host/oauth2/start?rd=$escaped_request_uri
-    nginx.ingress.kubernetes.io/auth-url: {{ if index $oauth2 "use-https" | default false }}https{{ else }}http{{ end }}://$host/oauth2/auth
+    {{- $useHttps := index $oauth2 "use-https" | default false }}
+    {{- $authUrlOverride := index .Values.grafana.ingress "oauthAuthUrlOverride" | default "" }}
+    {{- $oauthAuthSubrequestUseClusterDNS := index .Values.grafana.ingress "oauthAuthSubrequestUseClusterDNS" | default false }}
+    nginx.ingress.kubernetes.io/auth-signin: {{ if $useHttps }}https{{ else }}http{{ end }}://$host/oauth2/start?rd=$escaped_request_uri
+    {{- if ne $authUrlOverride "" }}
+    nginx.ingress.kubernetes.io/auth-url: {{ $authUrlOverride | quote }}
+    {{- else if $oauthAuthSubrequestUseClusterDNS }}
+    nginx.ingress.kubernetes.io/auth-url: {{ printf "http://%s-oauth2-proxy.%s.svc.cluster.local:4180/oauth2/auth" (include "skypilot.fullname" .) .Release.Namespace | quote }}
+    {{- else }}
+    nginx.ingress.kubernetes.io/auth-url: {{ if $useHttps }}https{{ else }}http{{ end }}://$host/oauth2/auth
+    {{- end }}
     nginx.ingress.kubernetes.io/auth-response-headers: {{ index .Values.grafana "grafana.ini" "auth.proxy" "header_name" }}
     {{- else }}
     # Basic authentication

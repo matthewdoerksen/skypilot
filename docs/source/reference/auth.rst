@@ -305,6 +305,10 @@ If you are using Microsoft Entra ID or any other provider that requires the redi
     $ helm upgrade -n $NAMESPACE $RELEASE_NAME skypilot/skypilot-nightly --devel --reuse-values \
       --set auth.oauth.use-https=true
 
+.. note::
+
+   If TLS terminates at an edge load balancer or gateway *before* ingress-nginx (while browsers still use HTTPS), nginx ``auth_request`` for the Grafana authed ingress can fail when ``auth.oauth.use-https=true`` because the subrequest targets ``https://$host/oauth2/auth`` on the public hostname. In that case set ``grafana.ingress.oauthAuthSubrequestUseClusterDNS`` to ``true`` (or set ``grafana.ingress.oauthAuthUrlOverride``) so the auth subrequest reaches oauth2-proxy inside the cluster. With ``auth.oauth.enabled`` and a non-unified ingress, the chart also registers ``/oauth2`` on the same ingress host so browser redirects and callbacks keep working. See :ref:`helm-values-grafana-ingress-oauthAuthSubrequestUseClusterDNS` and :ref:`helm-values-grafana-ingress-oauthAuthUrlOverride`.
+
 .. _oauth-client-secret:
 
 For better security, you can also store the client details in a Kubernetes secret instead of passing them as Helm values:

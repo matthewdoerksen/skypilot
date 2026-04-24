@@ -266,6 +266,8 @@ Below is the available helm value keys and the default value of each key:
 
   :ref:`grafana <helm-values-grafana>`:
     :ref:`enabled <helm-values-grafana-enabled>`: false
+    :ref:`oauthAuthSubrequestUseClusterDNS <helm-values-grafana-ingress-oauthAuthSubrequestUseClusterDNS>`: false
+    :ref:`oauthAuthUrlOverride <helm-values-grafana-ingress-oauthAuthUrlOverride>`: ""
 
 Fields
 ----------
@@ -2575,6 +2577,8 @@ By default, Grafana is configured to work with the ingress controller and auth p
       path: "/grafana"
       ingressClassName: nginx
       hosts: null
+      oauthAuthSubrequestUseClusterDNS: false
+      oauthAuthUrlOverride: ""
     grafana.ini:
       server:
         domain: localhost
@@ -2614,6 +2618,20 @@ By default, Grafana is configured to work with the ingress controller and auth p
           updateIntervalSeconds: 30
           options:
             path: /var/lib/grafana/dashboards/default
+
+.. _helm-values-grafana-ingress-oauthAuthSubrequestUseClusterDNS:
+
+``grafana.ingress.oauthAuthSubrequestUseClusterDNS``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When ``true`` and the Grafana authed ingress uses OAuth (``auth.oauth.enabled`` or ``ingress.oauth2-proxy.enabled``), nginx ``auth_request`` uses an in-cluster HTTP URL for oauth2-proxy (``http://<release>-oauth2-proxy.<namespace>.svc.cluster.local:4180/oauth2/auth``) instead of ``https://$host/oauth2/auth`` or ``http://$host/oauth2/auth``. Use this when TLS terminates in front of ingress-nginx so subrequests do not hairpin through the public hostname. Browser-facing ``auth-signin`` still uses ``$host``. Default: ``false``.
+
+.. _helm-values-grafana-ingress-oauthAuthUrlOverride:
+
+``grafana.ingress.oauthAuthUrlOverride``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If non-empty, replaces the nginx ``auth-url`` annotation for the Grafana authed ingress only (verbatim). Browser ``auth-signin`` is unchanged. When set, this value takes precedence over ``oauthAuthSubrequestUseClusterDNS``. Default: ``""``.
 
 .. _helm-values-grafana-enabled:
 

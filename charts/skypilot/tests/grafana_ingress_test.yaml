@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: grafana_ingress_test
+templates:
+  - templates/grafana-ingress.yaml
+tests:
+  - it: should use public host auth-url with auth.oauth and use-https
+    set:
+      ingress.unified: false
+      grafana.enabled: true
+      grafana.ingress.enableAuthedIngress: true
+      auth.oauth.enabled: true
+      auth.oauth.use-https: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "https://$host/oauth2/auth"
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-signin"]
+          value: "https://$host/oauth2/start?rd=$escaped_request_uri"
+
+  - it: should use cluster DNS for auth-url when oauthAuthSubrequestUseClusterDNS
+    set:
+      ingress.unified: false
+      grafana.enabled: true
+      grafana.ingress.enableAuthedIngress: true
+      auth.oauth.enabled: true
+      auth.oauth.use-https: true
+      grafana.ingress.oauthAuthSubrequestUseClusterDNS: true
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "http://RELEASE-NAME-oauth2-proxy.NAMESPACE.svc.cluster.local:4180/oauth2/auth"
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-signin"]
+          value: "https://$host/oauth2/start?rd=$escaped_request_uri"
+
+  - it: should prefer oauthAuthUrlOverride over cluster DNS and use-https
+    set:
+      ingress.unified: false
+      grafana.enabled: true
+      grafana.ingress.enableAuthedIngress: true
+      auth.oauth.enabled: true
+      auth.oauth.use-https: true
+      grafana.ingress.oauthAuthSubrequestUseClusterDNS: true
+      grafana.ingress.oauthAuthUrlOverride: "http://oauth2-internal.example.svc:4180/oauth2/auth"
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/auth-url"]
+          value: "http://oauth2-internal.example.svc:4180/oauth2/auth"
+
+  - it: should not render grafana authed ingress when unified
+    set:
+      ingress.unified: true
+      grafana.enabled: true
+      grafana.ingress.enableAuthedIngress: true
+      auth.oauth.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

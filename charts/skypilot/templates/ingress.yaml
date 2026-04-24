@@ -99,7 +99,7 @@ spec:
             port:
               number: 80
       {{- end }}
-      {{- if and $unifiedIngress (index .Values.ingress "oauth2-proxy" "enabled") }}
+      {{- if and $unifiedIngress (or (index .Values.ingress "oauth2-proxy" "enabled") .Values.auth.oauth.enabled) }}
       - pathType: Prefix
         path: /oauth2
         backend:

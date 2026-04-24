@@ -1,4 +1,4 @@
-{{- if and (not .Values.ingress.unified) .Values.ingress.enabled (index .Values.ingress "oauth2-proxy" "enabled") }}
+{{- if and (not .Values.ingress.unified) .Values.ingress.enabled (or (index .Values.ingress "oauth2-proxy" "enabled") .Values.auth.oauth.enabled) }}
 {{- $kubeVersion := .Capabilities.KubeVersion.Major -}}
 {{- $kubeMinorVersion := .Capabilities.KubeVersion.Minor | trimSuffix "+" | int -}}
 {{- $useNewIngressClass := or (gt ($kubeVersion | int) 1) (and (eq ($kubeVersion | int) 1) (ge $kubeMinorVersion 18)) -}}
@@ -21,7 +21,9 @@ spec:
   ingressClassName: nginx
   {{- end }}
   rules:
-  - host: {{ .Values.ingress.host }}
+  - {{- if .Values.ingress.host }}
+    host: {{ .Values.ingress.host | quote }}
+    {{- end }}
     http:
       paths:
       - path: /oauth2

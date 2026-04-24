@@ -324,12 +324,34 @@ tests:
         template: templates/oauth2-proxy-redis.yaml
         documentIndex: 0
 
-  - it: should not create oauth2-proxy ingress when using new auth config
+  - it: should create oauth2-proxy ingress when using new auth config with ingress enabled
     set:
       auth.oauth.enabled: true
       auth.oauth.oidc-issuer-url: "https://example.okta.com/oauth2/default"
       auth.oauth.client-id: "test-client-id"
       auth.oauth.client-secret: "test-client-secret"
+      ingress.enabled: true
+      ingress.unified: false
+      ingress.oauth2-proxy.enabled: false
+      ingress.host: "api.example.com"
+    template: templates/oauth2-proxy-ingress.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.rules[0].host
+          value: "api.example.com"
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/oauth2"
+
+  - it: should not create oauth2-proxy ingress when using new auth config but ingress disabled
+    set:
+      auth.oauth.enabled: true
+      auth.oauth.oidc-issuer-url: "https://example.okta.com/oauth2/default"
+      auth.oauth.client-id: "test-client-id"
+      auth.oauth.client-secret: "test-client-secret"
+      ingress.enabled: false
     template: templates/oauth2-proxy-ingress.yaml
     asserts:
       - hasDocuments:

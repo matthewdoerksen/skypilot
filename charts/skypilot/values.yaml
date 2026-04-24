@@ -757,6 +757,15 @@ grafana:
     hosts: []
     # Custom annotations for the ingress
     annotations: null
+    # When true with OAuth on the Grafana ingress, nginx auth_request uses an in-cluster URL for
+    # oauth2-proxy instead of https://$host/oauth2/auth. Use when TLS terminates before
+    # ingress-nginx so auth subrequests do not hairpin through the public hostname.
+    # @schema type: [boolean]
+    oauthAuthSubrequestUseClusterDNS: false
+    # If non-empty, replaces nginx auth-url for the Grafana ingress only (browser auth-signin
+    # still uses $host). Overrides oauthAuthSubrequestUseClusterDNS when set.
+    # @schema type: [string, null]
+    oauthAuthUrlOverride: ""
 
   grafana.ini:
     server:
