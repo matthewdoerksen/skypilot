@@ -16,6 +16,7 @@ import { apiClient } from '@/data/connectors/client';
 import { checkGrafanaAvailability, getGrafanaUrl } from '@/utils/grafana';
 import { trackSettingsAction } from '@/lib/analytics';
 import { PluginSlot } from '@/plugins/PluginSlot';
+import { YamlEditor } from '@/components/ui/yaml-editor';
 
 export function Config() {
   const [editableConfig, setEditableConfig] = useState('');
@@ -151,9 +152,11 @@ export function Config() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4 h-5">
+      <div className="flex items-center justify-between mb-4 h-8">
         <div className="text-base flex items-center">
-          <span className="text-sky-blue">SkyPilot API Server</span>
+          <span className="text-sky-blue leading-none">
+            SkyPilot API Server
+          </span>
         </div>
 
         <div className="flex items-center">
@@ -180,7 +183,7 @@ export function Config() {
                   '_blank'
                 );
               }}
-              className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-sky-blue-bright border border-transparent rounded-md shadow-sm hover:bg-sky-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-blue mr-4"
+              className="inline-flex items-center h-8 px-3 text-sm font-medium text-white bg-sky-blue-bright border border-transparent rounded-md shadow-sm hover:bg-sky-blue focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-blue mr-4"
             >
               <svg
                 className="w-4 h-4 mr-2"
@@ -290,15 +293,11 @@ export function Config() {
           )}
 
           <div className="w-full">
-            <textarea
+            <YamlEditor
               value={editableConfig}
-              onChange={(e) => setEditableConfig(e.target.value)}
-              className="w-full h-96 p-3 border border-gray-300 rounded font-mono text-sm resize-vertical focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder={
-                loading
-                  ? 'Loading configuration...'
-                  : '# Enter SkyPilot configuration in YAML format\n# Example:\n# kubernetes:\n#   allowed_contexts: [default, my-context]'
-              }
+              onChange={(val) => setEditableConfig(val)}
+              minHeight="384px"
+              maxHeight="600px"
               disabled={loading || saving}
             />
           </div>

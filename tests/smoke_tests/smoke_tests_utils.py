@@ -295,16 +295,21 @@ _WAIT_UNTIL_MANAGED_JOB_STATUS_CONTAINS_MATCHING_JOB_NAME = _WAIT_UNTIL_JOB_STAT
     'sky queue {cluster_name}', 'sky jobs queue').replace(
         'awk "\\$2 == \\"{job_name}\\"',
         'awk "\\$2 == \\"{job_name}\\" || \\$3 == \\"{job_name}\\"').replace(
-            _ALL_JOB_STATUSES, _ALL_MANAGED_JOB_STATUSES)
+            _ALL_JOB_STATUSES,
+            _ALL_MANAGED_JOB_STATUSES).replace('sleep 10',
+                                               'sleep {gap_seconds}')
 
 
 def get_cmd_wait_until_managed_job_status_contains_matching_job_name(
-        job_name: str, job_status: Sequence[sky.ManagedJobStatus],
-        timeout: int):
+        job_name: str,
+        job_status: Sequence[sky.ManagedJobStatus],
+        timeout: int,
+        gap_seconds: int = 10):
     return _WAIT_UNTIL_MANAGED_JOB_STATUS_CONTAINS_MATCHING_JOB_NAME.format(
         job_name=job_name,
         job_status=_statuses_to_str(job_status),
-        timeout=timeout)
+        timeout=timeout,
+        gap_seconds=gap_seconds)
 
 
 _WAIT_UNTIL_PIPELINE_TASK_STATUS = (
@@ -433,6 +438,29 @@ def is_eks_cluster() -> bool:
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL)
     return result.returncode == 0
+
+
+def kubectl_for_cluster(cluster_name: str) -> str:
+    """``kubectl --context <ctx>`` with <ctx> resolved at *shell* runtime
+    to the kubeconfig context that contains a pod for ``cluster_name``.
+
+    Smoke pipelines fall into two shapes:
+
+    * Single-context (kind-based): only ``kind-skypilot`` exists, so the
+      discovery loop short-circuits on the first iteration.
+    * Multi-context (shared-GKE): the runner has the API server's
+      cluster as current-context and the workload cluster as a second
+      entry; the loop picks the one that actually owns the pod.
+
+    The returned string is meant to be interpolated into an f-string
+    command, e.g. ``f'{kubectl_for_cluster(name)} delete pod foo'``.
+    The context lookup runs at command-execution time (not test-collection
+    time), so it sees the pod created by an earlier ``sky launch`` step.
+    """
+    return (
+        f'kubectl --context "$(for c in $(kubectl config get-contexts -o name); '
+        f'do kubectl --context "$c" get pods -o name 2>/dev/null '
+        f'| grep -q {cluster_name} && echo "$c" && break; done)"')
 
 
 def get_replica_cluster_name_on_gcp(name: str, replica_id: int) -> str:
@@ -949,13 +977,29 @@ def run_cloud_cmd_on_cluster(test_cluster_name: str,
                              cmd: str,
                              envs: Set[str] = None,
                              timeout: int = 180,
-                             skip_remote_server_check: bool = False) -> str:
-    """Run the cloud command on the remote cluster for cloud commands."""
+                             skip_remote_server_check: bool = False,
+                             setup_cmd: Optional[str] = None) -> str:
+    """Run the cloud command on the remote cluster for cloud commands.
+
+    Args:
+        setup_cmd: Optional command to prepare the remote cloud-cmd cluster
+            (e.g. installing cloud CLIs into the SkyPilot runtime venv). Only
+            run when `cmd` targets the remote cluster: when the API server is
+            local, `cmd` runs verbatim on the local machine, where the
+            runtime venv does not exist and the local environment is assumed
+            to already have the cloud dependencies.
+    """
     cluster_name = test_cluster_name + _CLOUD_CMD_CLUSTER_NAME_SUFFIX
     if not skip_remote_server_check and sky.server.common.is_api_server_local(
     ) and not is_remote_server_test():
         return cmd
     else:
+        if setup_cmd is not None:
+            # Group `cmd` so that a setup failure fails the whole command
+            # instead of falling through to any `||` branches in `cmd`.
+            # Strip trailing semicolons from `cmd` first: `;;` inside the
+            # group is a bash syntax error.
+            cmd = f'{setup_cmd} && {{ {cmd.rstrip().rstrip(";")}; }}'
         cmd = f'{constants.ACTIVATE_SKY_REMOTE_PYTHON_ENV} && {cmd}'
         wait_for_cluster_up = get_cmd_wait_until_cluster_status_contains(
             cluster_name=cluster_name,
@@ -1133,10 +1177,10 @@ def get_dashboard_cluster_status_request_id() -> str:
 
 def get_dashboard_jobs_queue_request_id() -> str:
     """Get the jobs queue from the dashboard."""
-    body = payloads.JobsQueueBody(all_users=True,)
+    body = payloads.JobsQueueV2Body(all_users=True, limit=1000)
     response = server_common.make_authenticated_request(
         'POST',
-        '/internal/dashboard/jobs/queue',
+        '/internal/dashboard/jobs/queue/v2',
         json=json.loads(body.model_dump_json()),
         server_url=get_api_server_url())
     return server_common.get_request_id(response)
