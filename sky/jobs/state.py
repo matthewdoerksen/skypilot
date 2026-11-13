@@ -351,6 +351,11 @@ job_info_table = sqlalchemy.Table(
     sqlalchemy.Column('cloud', sqlalchemy.Text, server_default=None),
     sqlalchemy.Column('region', sqlalchemy.Text, server_default=None),
     sqlalchemy.Column('zone', sqlalchemy.Text, server_default=None),
+    # Cloud-side cluster name used as Grafana var-cluster. Persisted so the
+    # dashboard Telemetry section still filters after the live handle is gone.
+    sqlalchemy.Column('cluster_name_on_cloud',
+                      sqlalchemy.Text,
+                      server_default=None),
     # Whether this job is a batch coordinator (ds.map()).  Batch jobs are
     # serialized one-at-a-time per pool by the scheduler.
     sqlalchemy.Column('is_batch',
@@ -872,6 +877,7 @@ def _get_jobs_dict(r: 'row.RowMapping') -> Dict[str, Any]:
         'cloud': m.get('cloud'),
         'region': m.get('region'),
         'zone': m.get('zone'),
+        'cluster_name_on_cloud': m.get('cluster_name_on_cloud'),
         # Batch progress columns
         'is_batch': m.get('is_batch'),
         'batch_total_batches': m.get('batch_total_batches'),
@@ -3237,11 +3243,13 @@ def set_job_infra(job_id: int,
                   cloud: Optional[str] = None,
                   region: Optional[str] = None,
                   zone: Optional[str] = None,
-                  current_node_names: Optional[List[str]] = None) -> None:
+                  current_node_names: Optional[List[str]] = None,
+                  cluster_name_on_cloud: Optional[str] = None) -> None:
     """Update the infrastructure info for a job.
 
-    This is called after a job is launched to record the cloud/region/zone
-    and node names for sorting, filtering, and dashboard display purposes.
+    This is called after a job is launched to record the cloud/region/zone,
+    cloud-side cluster name, and node names for sorting, filtering, and
+    dashboard display purposes.
 
     Args:
         job_id: The job ID to update.
@@ -3250,6 +3258,9 @@ def set_job_infra(job_id: int,
         zone: The zone (e.g., 'us-central1-a').
         current_node_names: List of current node names (head first) to merge
             into the existing lineage.
+        cluster_name_on_cloud: Provider-side cluster name (Grafana
+            ``var-cluster``). Persisted so finished jobs can still open
+            Telemetry after the live handle is torn down.
     """
     engine = _db_manager.get_engine()
     with orm.Session(engine) as session:
@@ -3260,6 +3271,9 @@ def set_job_infra(job_id: int,
             update_values[job_info_table.c.region] = region
         if zone is not None:
             update_values[job_info_table.c.zone] = zone
+        if cluster_name_on_cloud is not None:
+            update_values[
+                job_info_table.c.cluster_name_on_cloud] = cluster_name_on_cloud
         if current_node_names is not None:
             row = session.query(job_info_table.c.node_names).filter(
                 job_info_table.c.spot_job_id ==

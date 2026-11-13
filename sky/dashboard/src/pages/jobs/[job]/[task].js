@@ -270,6 +270,8 @@ function TaskDetails() {
                   refreshTrigger={telemetryRefreshTrigger}
                   storageKey="skypilot-task-telemetry-expanded"
                   hasGpu={hasAccelerator(taskData.accelerators)}
+                  jobStartAt={taskData.start_at}
+                  jobEndAt={taskData.end_at}
                 />
               )}
 

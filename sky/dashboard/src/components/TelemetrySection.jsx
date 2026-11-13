@@ -47,6 +47,25 @@ const TELEMETRY_PANELS = [
 ];
 
 /**
+ * Absolute Grafana from/to (epoch ms strings) for a finished job window.
+ *
+ * @param {number|string|null|undefined} startAt - Job start_at (epoch seconds).
+ * @param {number|string|null|undefined} endAt - Job end_at (epoch seconds).
+ * @returns {{from: string, to: string}|null}
+ */
+export function jobRunTimeRange(startAt, endAt) {
+  if (startAt == null || endAt == null) {
+    return null;
+  }
+  const fromMs = Math.floor(Number(startAt) * 1000);
+  const toMs = Math.floor(Number(endAt) * 1000);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+    return null;
+  }
+  return { from: String(fromMs), to: String(toMs) };
+}
+
+/**
  * Build Grafana panel URL with filters. All panels live in the same
  * SkyPilot cluster-filter dashboard and share var-cluster, so the same
  * `cluster_name_on_cloud` filter scopes both GPU (DCGM) and per-pod
@@ -81,6 +100,8 @@ const buildGrafanaPanelUrl = (panel, clusterNameOnCloud, timeRange) => {
  * @param {React.ReactNode} props.headerExtra - Optional extra content for header (e.g., task selector)
  * @param {string} props.noMetricsMessage - Custom message when no metrics available
  * @param {boolean} props.hasGpu - When false, hide GPU panels and only show CPU/Memory.
+ * @param {number|string|null} [props.jobStartAt] - Finished-job start_at (epoch seconds).
+ * @param {number|string|null} [props.jobEndAt] - Finished-job end_at (epoch seconds).
  */
 export function TelemetrySection({
   clusterNameOnCloud,
@@ -90,11 +111,16 @@ export function TelemetrySection({
   headerExtra = null,
   noMetricsMessage = 'No telemetry available.',
   hasGpu = true,
+  jobStartAt = null,
+  jobEndAt = null,
 }) {
   const visiblePanels = hasGpu
     ? TELEMETRY_PANELS
     : TELEMETRY_PANELS.filter((p) => p.family !== 'gpu');
-  const [timeRange, setTimeRange] = useState({ from: 'now-1h', to: 'now' });
+  const jobRange = jobRunTimeRange(jobStartAt, jobEndAt);
+  const [timeRange, setTimeRange] = useState(
+    () => jobRange || { from: 'now-1h', to: 'now' }
+  );
   const [isExpanded, setIsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(storageKey);
@@ -108,6 +134,12 @@ export function TelemetrySection({
       from: `now-${preset}`,
       to: 'now',
     });
+  };
+
+  const handleJobRunRange = () => {
+    if (jobRange) {
+      setTimeRange(jobRange);
+    }
   };
 
   const toggleExpanded = () => {
@@ -133,6 +165,11 @@ export function TelemetrySection({
       '_blank'
     );
   };
+
+  const isJobRunSelected =
+    jobRange &&
+    timeRange.from === jobRange.from &&
+    timeRange.to === jobRange.to;
 
   return (
     <div className="mt-6">
@@ -174,7 +211,19 @@ export function TelemetrySection({
                   <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
                     Time Range:
                   </label>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
+                    {jobRange && (
+                      <button
+                        onClick={handleJobRunRange}
+                        className={`px-2 py-1 text-xs font-medium rounded border transition-colors ${
+                          isJobRunSelected
+                            ? 'bg-sky-blue text-white border-sky-blue'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Job run
+                      </button>
+                    )}
                     {TIME_RANGE_PRESETS.map((preset) => (
                       <button
                         key={preset.value}
@@ -195,8 +244,10 @@ export function TelemetrySection({
 
               {/* Show current selection info */}
               <div className="mt-2 text-xs text-gray-500">
-                Showing: {displayName} • Time: {timeRange.from} to{' '}
-                {timeRange.to}
+                Showing: {displayName} • Time:{' '}
+                {isJobRunSelected
+                  ? 'job run (start → end)'
+                  : `${timeRange.from} to ${timeRange.to}`}
               </div>
             </div>
 

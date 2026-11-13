@@ -2139,6 +2139,7 @@ class FailoverStrategyExecutor(StrategyExecutor):
                     region=launched_resources.region,
                     zone=launched_resources.zone,
                     current_node_names=current_names,
+                    cluster_name_on_cloud=handle.cluster_name_on_cloud,
                 )
         else:
             self._launched_resources = None

@@ -2779,3 +2779,45 @@ def test_get_jobs_dict_reads_selected_columns_without_probing_row_mapping():
     # keyed by Column object and must stay on the RowMapping; nothing else
     # may touch it.
     assert row.direct_gets <= 2
+
+
+
+def test_set_job_infra_persists_cluster_name_on_cloud(_mock_managed_jobs_db_conn):
+    """set_job_infra stores cluster_name_on_cloud for finished-job Telemetry."""
+
+    async def mock_callback(status: str):
+        pass
+
+    async def _run():
+        job_id = state.set_job_info_without_job_id(name='telemetry-job',
+                                                   workspace='ws1',
+                                                   entrypoint='ep',
+                                                   pool=None,
+                                                   pool_hash=None,
+                                                   user_hash='user1')
+        state.set_pending(job_id,
+                          task_id=0,
+                          task_name='task0',
+                          resources_str='{}',
+                          metadata='{}')
+        state.scheduler_set_waiting([job_id], '/tmp/dag.yaml', '/tmp/user.yaml',
+                                    '/tmp/env', None, 100)
+        await state.set_starting_async(job_id, 0, 'run-1', 100.0, '{}', {},
+                                       mock_callback)
+        await state.set_started_async(job_id, 0, 100.0, mock_callback)
+        state.set_job_infra(job_id,
+                            cloud='Kubernetes',
+                            region='my-ctx',
+                            zone=None,
+                            cluster_name_on_cloud='task0-42-ab12')
+        jobs, _ = state.get_managed_jobs_with_filters(
+            job_ids=[job_id], fields=['job_id', 'cluster_name_on_cloud', 'cloud'])
+        assert len(jobs) == 1
+        assert jobs[0]['cluster_name_on_cloud'] == 'task0-42-ab12'
+        assert jobs[0]['cloud'] == 'Kubernetes'
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()
