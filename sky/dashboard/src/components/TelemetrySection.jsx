@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -121,6 +121,9 @@ export function TelemetrySection({
   const [timeRange, setTimeRange] = useState(
     () => jobRange || { from: 'now-1h', to: 'now' }
   );
+  // When the user picks a relative preset, stop auto-pinning to the job
+  // window. "Job run" clears this so we follow start_at/end_at again.
+  const [manualRelativeOverride, setManualRelativeOverride] = useState(false);
   const [isExpanded, setIsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(storageKey);
@@ -129,7 +132,16 @@ export function TelemetrySection({
     return false;
   });
 
+  useEffect(() => {
+    const next = jobRunTimeRange(jobStartAt, jobEndAt);
+    if (!next || manualRelativeOverride) {
+      return;
+    }
+    setTimeRange(next);
+  }, [jobStartAt, jobEndAt, manualRelativeOverride]);
+
   const handleTimeRangePreset = (preset) => {
+    setManualRelativeOverride(true);
     setTimeRange({
       from: `now-${preset}`,
       to: 'now',
@@ -137,6 +149,7 @@ export function TelemetrySection({
   };
 
   const handleJobRunRange = () => {
+    setManualRelativeOverride(false);
     if (jobRange) {
       setTimeRange(jobRange);
     }
